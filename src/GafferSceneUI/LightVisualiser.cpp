@@ -40,6 +40,7 @@
 #include "IECoreGL/Group.h"
 
 #include "GafferSceneUI/LightVisualiser.h"
+#include "GafferSceneUI/StandardLightVisualiser.h"
 
 using namespace std;
 using namespace Imath;
@@ -139,6 +140,12 @@ IECoreGL::ConstRenderablePtr LightVisualiser::visualise( const IECore::Object *o
 	if( it != l.end() )
 	{
 		return it->second->visualise( object );
+	}
+	else
+	{
+		/// REMOVE ME !!!
+		StandardLightVisualiserPtr v = new StandardLightVisualiser();
+		return v->visualise( object );
 	}
 
 	return fallbackVisualisation();
