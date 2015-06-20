@@ -53,57 +53,6 @@ using namespace GafferSceneUI;
 namespace
 {
 
-IECoreGL::ConstRenderablePtr fallbackVisualisation()
-{
-	static IECoreGL::GroupPtr group = NULL;
-	if( !group )
-	{
-		group = new IECoreGL::Group;
-
-		group->getState()->add( new IECoreGL::Primitive::DrawWireframe( true ) );
-		group->getState()->add( new IECoreGL::Primitive::DrawSolid( false ) );
-		group->getState()->add( new IECoreGL::CurvesPrimitive::UseGLLines( true ) );
-		group->getState()->add( new IECoreGL::WireframeColorStateComponent( Color4f( 0.5, 0, 0, 1 ) ) );
-
-		const float a = 0.5f;
-		const float phi = 1.0f + sqrt( 5.0f ) / 2.0f;
-		const float b = 1.0f / ( 2.0f * phi );
-
-		// icosahedron points
-		IECore::V3fVectorDataPtr pData = new IECore::V3fVectorData;
-		vector<V3f> &p = pData->writable();
-		p.resize( 24 );
-		p[0] = V3f( 0, b, -a );
-		p[2] = V3f( b, a, 0 );
-		p[4] = V3f( -b, a, 0 );
-		p[6] = V3f( 0, b, a );
-		p[8] = V3f( 0, -b, a );
-		p[10] = V3f( -a, 0, b );
-		p[12] = V3f( 0, -b, -a );
-		p[14] = V3f( a, 0, -b );
-		p[16] = V3f( a, 0, b );
-		p[18] = V3f( -a, 0, -b );
-		p[20] = V3f( b, -a, 0 );
-		p[22] = V3f( -b, -a, 0 );
-
-		for( size_t i = 0; i<12; i++ )
-		{
-			p[i*2] = 2.0f * p[i*2].normalized();
-			p[i*2+1] = V3f( 0 );
-		}
-
-		IECore::IntVectorDataPtr vertsPerCurve = new IECore::IntVectorData;
-		vertsPerCurve->writable().resize( 12, 2 );
-
-		IECoreGL::CurvesPrimitivePtr curves = new IECoreGL::CurvesPrimitive( IECore::CubicBasisf::linear(), false, vertsPerCurve );
-		curves->addPrimitiveVariable( "P", IECore::PrimitiveVariable( IECore::PrimitiveVariable::Vertex, pData ) );
-
-		group->addChild( curves );
-	}
-
-	return group;
-}
-
 typedef boost::container::flat_map<IECore::InternedString, ConstLightVisualiserPtr> LightVisualisers;
 LightVisualisers &lightVisualisers()
 {
@@ -143,12 +92,9 @@ IECoreGL::ConstRenderablePtr LightVisualiser::visualise( const IECore::Object *o
 	}
 	else
 	{
-		/// REMOVE ME !!!
-		StandardLightVisualiserPtr v = new StandardLightVisualiser();
-		return v->visualise( object );
+		static StandardLightVisualiserPtr g_defaultVisualiser = new StandardLightVisualiser();
+		return g_defaultVisualiser->visualise( object );
 	}
-
-	return fallbackVisualisation();
 }
 
 void LightVisualiser::registerLightVisualiser( const IECore::InternedString &name, ConstLightVisualiserPtr visualiser )
