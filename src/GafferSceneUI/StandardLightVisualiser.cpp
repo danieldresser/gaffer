@@ -43,6 +43,7 @@
 #include "GafferSceneUI/StandardLightVisualiser.h"
 
 using namespace std;
+using namespace boost;
 using namespace Imath;
 using namespace IECore;
 using namespace IECoreGL;
@@ -85,6 +86,30 @@ void addRay( const V2f &start, const V2f &end, vector<int> &vertsPerCurve, vecto
 	vertsPerCurve.push_back( 3 );
 }
 
+void addCircle( const V3f &center, float radius, vector<int> &vertsPerCurve, vector<V3f> &p )
+{
+	const int numDivisions = 100;
+	for( int i = 0; i < numDivisions; ++i )
+	{
+		const float angle = 2 * M_PI * (float)i/(float)(numDivisions-1);
+		p.push_back( center + radius * V3f( cos( angle ), sin( angle ), 0 ) );
+	}
+	vertsPerCurve.push_back( numDivisions );
+}
+
+void addCone( float angle, vector<int> &vertsPerCurve, vector<V3f> &p )
+{
+	addCircle( V3f( 0, 0, -1 ), sin( M_PI * angle / 180.0 ), vertsPerCurve, p );
+
+	p.push_back( V3f( 0 ) );
+	p.push_back( V3f( 0, sin( M_PI * angle / 180.0 ), -1 ) );
+	vertsPerCurve.push_back( 2 );
+
+	p.push_back( V3f( 0 ) );
+	p.push_back( V3f( 0, -sin( M_PI * angle / 180.0 ), -1 ) );
+	vertsPerCurve.push_back( 2 );
+}
+
 //////////////////////////////////////////////////////////////////////////
 // StandardLightVisualiser implementation.
 //////////////////////////////////////////////////////////////////////////
@@ -99,7 +124,12 @@ StandardLightVisualiser::~StandardLightVisualiser()
 
 IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::Object *object ) const
 {
-	return pointRays();
+	GroupPtr result = new Group;
+
+	result->addChild( const_pointer_cast<IECoreGL::Renderable>( spotlightCone( 20, 25 ) ) );
+	result->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
+
+	return result;
 }
 
 const char *StandardLightVisualiser::faceCameraVertexSource()
@@ -137,8 +167,10 @@ const char *StandardLightVisualiser::faceCameraVertexSource()
 		"{"
 		""
 		"	vec4 viewDirectionInObjectSpace = gl_ModelViewMatrixInverse * vec4( 0, 0, -1, 0 );"
-		"	vec3 aimedXAxis = normalize( cross( viewDirectionInObjectSpace.xyz, vec3( 0, 0, -1 ) ) );"
-		"	vec3 pAimed = vertexP.y * aimedXAxis + vertexP.z * vec3( 0, 0, 1 );" // TODO!!!!! MAKE CONSISTENT!!!!!!!!!!!!!!!!!!!!!!
+		"	vec3 aimedYAxis = normalize( cross( viewDirectionInObjectSpace.xyz, vec3( 0, 0, -1 ) ) );"
+		"	vec3 aimedXAxis = normalize( cross( aimedYAxis, vec3( 0, 0, -1 ) ) );"
+		""
+		"	vec3 pAimed = vertexP.x * aimedXAxis + vertexP.y * aimedYAxis + vertexP.z * vec3( 0, 0, 1 );"
 		""
 		"	vec4 pCam = gl_ModelViewMatrix * vec4( pAimed, 1 );"
 		"	gl_Position = gl_ProjectionMatrix * pCam;"
@@ -220,7 +252,44 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::pointRays()
 	return group;
 }
 
-IECoreGL::ConstRenderablePtr StandardLightVisualiser::spotlightCone( float coneAngle, float penumbraAngle )
+IECoreGL::ConstRenderablePtr StandardLightVisualiser::spotlightCone( float innerAngle, float outerAngle )
 {
-	return NULL;
+	IECoreGL::GroupPtr group = new IECoreGL::Group();
+	addWireframeCurveState( group.get() );
+
+	group->getState()->add( new IECoreGL::CurvesPrimitive::GLLineWidth( 1.0f ) );
+
+	group->getState()->add(
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), new CompoundObject )
+	);
+
+	IntVectorDataPtr vertsPerCurve = new IntVectorData;
+	V3fVectorDataPtr p = new V3fVectorData;
+	addCone( innerAngle, vertsPerCurve->writable(), p->writable() );
+
+	IECoreGL::CurvesPrimitivePtr curves = new IECoreGL::CurvesPrimitive( IECore::CubicBasisf::linear(), false, vertsPerCurve );
+	curves->addPrimitiveVariable( "P", IECore::PrimitiveVariable( IECore::PrimitiveVariable::Vertex, p ) );
+	curves->addPrimitiveVariable( "Cs", IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new Color3fData( Color3f( 1.0f, 0.835f, 0.07f ) ) ) );
+
+	group->addChild( curves );
+
+	if( fabs( innerAngle - outerAngle ) > 0.1 )
+	{
+		IECoreGL::GroupPtr outerGroup = new Group;
+		outerGroup->getState()->add( new IECoreGL::CurvesPrimitive::GLLineWidth( 0.5f ) );
+
+		IntVectorDataPtr vertsPerCurve = new IntVectorData;
+		V3fVectorDataPtr p = new V3fVectorData;
+		addCone( outerAngle, vertsPerCurve->writable(), p->writable() );
+
+		IECoreGL::CurvesPrimitivePtr curves = new IECoreGL::CurvesPrimitive( IECore::CubicBasisf::linear(), false, vertsPerCurve );
+		curves->addPrimitiveVariable( "P", IECore::PrimitiveVariable( IECore::PrimitiveVariable::Vertex, p ) );
+		curves->addPrimitiveVariable( "Cs", IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new Color3fData( Color3f( 1.0f, 0.835f, 0.07f ) ) ) );
+
+		outerGroup->addChild( curves );
+
+		group->addChild( outerGroup );
+	}
+
+	return group;
 }

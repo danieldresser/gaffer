@@ -65,7 +65,7 @@ class StandardLightVisualiser : public LightVisualiser
 
 		static IECoreGL::ConstRenderablePtr ray();
 		static IECoreGL::ConstRenderablePtr pointRays();
-		static IECoreGL::ConstRenderablePtr spotlightCone( float coneAngle, float penumbraAngle );
+		static IECoreGL::ConstRenderablePtr spotlightCone( float innerAngle, float outerAngle );
 
 };
 
