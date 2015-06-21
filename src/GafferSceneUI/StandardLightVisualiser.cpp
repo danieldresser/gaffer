@@ -40,6 +40,8 @@
 #include "IECoreGL/ShaderLoader.h"
 #include "IECoreGL/TextureLoader.h"
 
+#include "Gaffer/Metadata.h"
+
 #include "GafferSceneUI/StandardLightVisualiser.h"
 
 using namespace std;
@@ -47,12 +49,32 @@ using namespace boost;
 using namespace Imath;
 using namespace IECore;
 using namespace IECoreGL;
+using namespace Gaffer;
 using namespace GafferSceneUI;
 
 //////////////////////////////////////////////////////////////////////////
 // Utility methods. We define these in an anonymouse namespace rather
 // than clutter up the header with private methods.
 //////////////////////////////////////////////////////////////////////////
+
+template<typename T>
+T parameter( InternedString metadataTarget, const Light *light, InternedString parameterNameMetadata, T defaultValue )
+{
+	ConstStringDataPtr parameterName = Metadata::value<StringData>( metadataTarget, parameterNameMetadata );
+	if( !parameterName )
+	{
+		return defaultValue;
+	}
+
+	typedef IECore::TypedData<T> DataType;
+	/// \todo Add a const version of Light::parametersData() so we don't need the cast.
+	if( const DataType *parameterData = const_cast<Light *>( light )->parametersData()->member<DataType>( parameterName->readable() ) )
+	{
+		return parameterData->readable();
+	}
+
+	return defaultValue;
+}
 
 void addWireframeCurveState( IECoreGL::Group *group )
 {
@@ -124,10 +146,37 @@ StandardLightVisualiser::~StandardLightVisualiser()
 
 IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::Object *object ) const
 {
-	GroupPtr result = new Group;
+	const IECore::Light *light = runTimeCast<const IECore::Light>( object );
+	if( !light )
+	{
+		return NULL;
+	}
 
-	result->addChild( const_pointer_cast<IECoreGL::Renderable>( spotlightCone( 20, 25 ) ) );
-	result->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
+	InternedString metadataTarget = "light:" + light->getName();
+	ConstStringDataPtr type = Metadata::value<StringData>( metadataTarget, "type" );
+
+	GroupPtr result = new Group;
+	if( !type || type->readable() == "point" )
+	{
+		result->addChild( const_pointer_cast<IECoreGL::Renderable>( pointRays() ) );
+	}
+	else if( type->readable() == "spot" )
+	{
+		float innerAngle = parameter<float>( metadataTarget, light, "coneAngleParameter", 20.0f );
+		float outerAngle = parameter<float>( metadataTarget, light, "penumbraAngleParameter", 0.0f );
+		std::string penumbraType = parameter<std::string>( metadataTarget, light, "penumbraType", "relative" );
+		if( penumbraType == "relative" )
+		{
+			outerAngle += innerAngle;
+		}
+
+		result->addChild( const_pointer_cast<IECoreGL::Renderable>( spotlightCone( innerAngle, outerAngle ) ) );
+		result->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
+	}
+	else if( type->readable() == "distant" )
+	{
+		result->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
+	}
 
 	return result;
 }
