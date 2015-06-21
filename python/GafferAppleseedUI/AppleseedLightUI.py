@@ -111,3 +111,13 @@ Gaffer.Metadata.registerNode(
 	},
 
 )
+
+Gaffer.Metadata.registerValue( "light:spot_light", "type", "spot" )
+Gaffer.Metadata.registerValue( "light:spot_light", "coneAngleParameter", "inner_angle" )
+Gaffer.Metadata.registerValue( "light:spot_light", "penumbraAngleParameter", "outer_angle" )
+Gaffer.Metadata.registerValue( "light:spot_light", "penumbraType", "absolute" )
+
+
+Gaffer.Metadata.registerValue( "light:point_light", "type", "point" )
+Gaffer.Metadata.registerValue( "light:directional_light", "type", "distant" )
+
