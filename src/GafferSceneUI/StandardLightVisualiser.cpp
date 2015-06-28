@@ -39,6 +39,7 @@
 #include "IECoreGL/ShaderStateComponent.h"
 #include "IECoreGL/ShaderLoader.h"
 #include "IECoreGL/TextureLoader.h"
+#include "IECoreGL/DiskPrimitive.h"
 
 #include "Gaffer/Metadata.h"
 
@@ -160,7 +161,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	{
 		result->addChild( const_pointer_cast<IECoreGL::Renderable>( pointRays() ) );
 	}
-	else if( type->readable() == "spot" )
+	if( type->readable() == "spot" )
 	{
 		float innerAngle = parameter<float>( metadataTarget, light, "coneAngleParameter", 20.0f );
 		float outerAngle = parameter<float>( metadataTarget, light, "penumbraAngleParameter", 0.0f );
@@ -177,6 +178,12 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	{
 		result->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
 	}
+
+	const Color3f color = parameter<Color3f>( metadataTarget, light, "colorParameter", Color3f( 1.0f ) );
+	const float intensity = parameter<float>( metadataTarget, light, "intensityParameter", 1 );
+	const float exposure = parameter<float>( metadataTarget, light, "exposureParameter", 0 );
+
+	result->addChild( const_pointer_cast<IECoreGL::Renderable>( colorIndicator( color, intensity * pow( 2.0f, exposure ) ) ) );
 
 	return result;
 }
@@ -356,6 +363,15 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::spotlightCone( float inner
 
 		group->addChild( outerGroup );
 	}
+
+	return group;
+}
+
+IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imath::Color3f &color, float intensity )
+{
+	IECoreGL::GroupPtr group = new IECoreGL::Group();
+
+	group->addChild( new DiskPrimitive( 0.1f ) );
 
 	return group;
 }
