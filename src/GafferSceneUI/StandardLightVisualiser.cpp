@@ -192,6 +192,8 @@ const char *StandardLightVisualiser::faceCameraVertexSource()
 		"#define out varying\n"
 		"#endif\n"
 		""
+		"uniform int aimType;"
+		""
 		"uniform vec3 Cs = vec3( 1, 1, 1 );"
 		"uniform bool vertexCsActive = false;"
 		""
@@ -215,11 +217,23 @@ const char *StandardLightVisualiser::faceCameraVertexSource()
 		"void main()"
 		"{"
 		""
-		"	vec4 viewDirectionInObjectSpace = gl_ModelViewMatrixInverse * vec4( 0, 0, -1, 0 );"
-		"	vec3 aimedYAxis = normalize( cross( viewDirectionInObjectSpace.xyz, vec3( 0, 0, -1 ) ) );"
-		"	vec3 aimedXAxis = normalize( cross( aimedYAxis, vec3( 0, 0, -1 ) ) );"
 		""
-		"	vec3 pAimed = vertexP.x * aimedXAxis + vertexP.y * aimedYAxis + vertexP.z * vec3( 0, 0, 1 );"
+		"	vec3 aimedXAxis, aimedYAxis, aimedZAxis;"
+		"	if( aimType == 0 )"
+		"	{"
+		"		vec4 viewDirectionInObjectSpace = gl_ModelViewMatrixInverse * vec4( 0, 0, -1, 0 );"
+		"		aimedYAxis = normalize( cross( viewDirectionInObjectSpace.xyz, vec3( 0, 0, -1 ) ) );"
+		"		aimedXAxis = normalize( cross( aimedYAxis, vec3( 0, 0, -1 ) ) );"
+		"		aimedZAxis = vec3( 0, 0, 1 );"
+		"	}"
+		"	else"
+		"	{"
+		"		aimedXAxis = normalize( gl_ModelViewMatrixInverse * vec4( 0, 0, -1, 0 ) ).xyz;"
+		"		aimedYAxis = normalize( gl_ModelViewMatrixInverse * vec4( 0, 1, 0, 0 ) ).xyz;"
+		"		aimedZAxis = normalize( gl_ModelViewMatrixInverse * vec4( 1, 0, 0, 0 ) ).xyz;"
+		"	}"
+		""
+		"	vec3 pAimed = vertexP.x * aimedXAxis + vertexP.y * aimedYAxis + vertexP.z * aimedZAxis;"
 		""
 		"	vec4 pCam = gl_ModelViewMatrix * vec4( pAimed, 1 );"
 		"	gl_Position = gl_ProjectionMatrix * pCam;"
@@ -252,13 +266,14 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::ray()
 	IECoreGL::GroupPtr group = new IECoreGL::Group();
 	addWireframeCurveState( group.get() );
 
+	IECore::CompoundObjectPtr parameters = new CompoundObject;
+	parameters->members()["aimType"] = new IntData( 0 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), new CompoundObject )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), parameters )
 	);
 
 	IntVectorDataPtr vertsPerCurve = new IntVectorData;
 	V3fVectorDataPtr p = new V3fVectorData;
-
 	addRay( V2f( 0 ), V2f( 1, 0 ), vertsPerCurve->writable(), p->writable() );
 
 	IECoreGL::CurvesPrimitivePtr curves = new IECoreGL::CurvesPrimitive( IECore::CubicBasisf::linear(), false, vertsPerCurve );
@@ -275,9 +290,10 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::pointRays()
 	IECoreGL::GroupPtr group = new IECoreGL::Group();
 	addWireframeCurveState( group.get() );
 
-	/// \todo NEED TO MAKE THIS FACE CAMERA FULLY
+	IECore::CompoundObjectPtr parameters = new CompoundObject;
+	parameters->members()["aimType"] = new IntData( 1 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), new CompoundObject )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), parameters )
 	);
 
 	IntVectorDataPtr vertsPerCurve = new IntVectorData;
@@ -288,9 +304,8 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::pointRays()
 	{
 		const float angle = M_PI * 2.0f * float(i)/(float)numRays;
 		const V2f dir( cos( angle ), sin( angle ) );
-		addRay( dir * 1, dir * 2, vertsPerCurve->writable(), p->writable() );
+		addRay( dir * .5, dir * 1, vertsPerCurve->writable(), p->writable() );
 	}
-
 
 	IECoreGL::CurvesPrimitivePtr curves = new IECoreGL::CurvesPrimitive( IECore::CubicBasisf::linear(), false, vertsPerCurve );
 	curves->addPrimitiveVariable( "P", IECore::PrimitiveVariable( IECore::PrimitiveVariable::Vertex, p ) );
@@ -308,8 +323,10 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::spotlightCone( float inner
 
 	group->getState()->add( new IECoreGL::CurvesPrimitive::GLLineWidth( 1.0f ) );
 
+	IECore::CompoundObjectPtr parameters = new CompoundObject;
+	parameters->members()["aimType"] = new IntData( 0 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), new CompoundObject )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), parameters )
 	);
 
 	IntVectorDataPtr vertsPerCurve = new IntVectorData;
