@@ -120,5 +120,9 @@ Gaffer.Metadata.registerValue( "light:spot_light", "intensityParameter", "intens
 Gaffer.Metadata.registerValue( "light:spot_light", "colorParameter", "intensity" )
 
 Gaffer.Metadata.registerValue( "light:point_light", "type", "point" )
-Gaffer.Metadata.registerValue( "light:directional_light", "type", "distant" )
+Gaffer.Metadata.registerValue( "light:point_light", "intensityParameter", "intensity_multiplier" )
+Gaffer.Metadata.registerValue( "light:point_light", "colorParameter", "intensity" )
 
+Gaffer.Metadata.registerValue( "light:directional_light", "type", "distant" )
+Gaffer.Metadata.registerValue( "light:directional_light", "intensityParameter", "irradiance_multiplier" )
+Gaffer.Metadata.registerValue( "light:directional_light", "colorParameter", "irradiance" )
