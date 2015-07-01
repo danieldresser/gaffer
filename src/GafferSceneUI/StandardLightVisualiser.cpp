@@ -58,6 +58,9 @@ using namespace GafferSceneUI;
 // than clutter up the header with private methods.
 //////////////////////////////////////////////////////////////////////////
 
+namespace
+{
+
 template<typename T>
 T parameter( InternedString metadataTarget, const Light *light, InternedString parameterNameMetadata, T defaultValue )
 {
@@ -133,6 +136,39 @@ void addCone( float angle, vector<int> &vertsPerCurve, vector<V3f> &p )
 	vertsPerCurve.push_back( 2 );
 }
 
+const char *colorIndicatorFragmentSource()
+{
+
+	return
+
+	"#include \"IECoreGL/ColorAlgo.h\"\n"
+	""
+	"#if __VERSION__ <= 120\n"
+	"#define in varying\n"
+	"#endif\n"
+	""
+	"uniform vec3 color;"
+	"uniform float intensity;"
+	""
+	"in vec2 fragmentst;"
+	""
+	"void main()"
+	"{"
+	"	float r = 2.0 * length( fragmentst - vec2( 0.5 ) );"
+	"	vec3 innerColor = color * intensity;"
+	"	vec3 outerColor = color;"
+	"	if( intensity < 1.0 )"
+	"	{"
+	"		outerColor *= intensity;"
+	"	}"
+	"	vec3 c = mix( innerColor, outerColor, r );"
+	"	gl_FragColor = vec4( ieLinToSRGB( c ), 1 );"
+	"}";
+
+}
+
+} // namespace
+
 //////////////////////////////////////////////////////////////////////////
 // StandardLightVisualiser implementation.
 //////////////////////////////////////////////////////////////////////////
@@ -161,7 +197,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	{
 		result->addChild( const_pointer_cast<IECoreGL::Renderable>( pointRays() ) );
 	}
-	if( type->readable() == "spot" )
+	else if( type->readable() == "spot" )
 	{
 		float innerAngle = parameter<float>( metadataTarget, light, "coneAngleParameter", 20.0f );
 		float outerAngle = parameter<float>( metadataTarget, light, "penumbraAngleParameter", 0.0f );
@@ -372,6 +408,13 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imat
 	IECoreGL::GroupPtr group = new IECoreGL::Group();
 
 	group->addChild( new DiskPrimitive( 0.1f ) );
+
+	IECore::CompoundObjectPtr parameters = new CompoundObject;
+	parameters->members()["color"] = new Color3fData( color );
+	parameters->members()["intensity"] = new FloatData( intensity );
+	group->getState()->add(
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), "", "", colorIndicatorFragmentSource(), parameters )
+	);
 
 	return group;
 }
