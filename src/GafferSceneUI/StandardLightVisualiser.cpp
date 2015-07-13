@@ -125,14 +125,17 @@ void addCircle( const V3f &center, float radius, vector<int> &vertsPerCurve, vec
 
 void addCone( float angle, vector<int> &vertsPerCurve, vector<V3f> &p )
 {
-	addCircle( V3f( 0, 0, -1 ), sin( M_PI * angle / 180.0 ), vertsPerCurve, p );
+	const float halfAngle = 0.5 * M_PI * angle / 180.0;
+	const float baseRadius = tan( halfAngle );
+
+	addCircle( V3f( 0, 0, -1 ), baseRadius, vertsPerCurve, p );
 
 	p.push_back( V3f( 0 ) );
-	p.push_back( V3f( 0, sin( M_PI * angle / 180.0 ), -1 ) );
+	p.push_back( V3f( 0, baseRadius, -1 ) );
 	vertsPerCurve.push_back( 2 );
 
 	p.push_back( V3f( 0 ) );
-	p.push_back( V3f( 0, -sin( M_PI * angle / 180.0 ), -1 ) );
+	p.push_back( V3f( 0, -baseRadius, -1 ) );
 	vertsPerCurve.push_back( 2 );
 }
 
@@ -199,12 +202,37 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	}
 	else if( type->readable() == "spot" )
 	{
-		float innerAngle = parameter<float>( metadataTarget, light, "coneAngleParameter", 20.0f );
-		float outerAngle = parameter<float>( metadataTarget, light, "penumbraAngleParameter", 0.0f );
-		std::string penumbraType = parameter<std::string>( metadataTarget, light, "penumbraType", "relative" );
-		if( penumbraType == "relative" )
+		float coneAngle = parameter<float>( metadataTarget, light, "coneAngleParameter", 0.0f );
+		float penumbraAngle = parameter<float>( metadataTarget, light, "penumbraAngleParameter", 0.0f );
+
+		if( ConstStringDataPtr angleUnit = Metadata::value<StringData>( metadataTarget, "angleUnit" ) )
 		{
-			outerAngle += innerAngle;
+			if( angleUnit->readable() == "radians" )
+			{
+				coneAngle *= 180.0 / M_PI;
+				penumbraAngle *= 180 / M_PI;
+			}
+		}
+
+		ConstStringDataPtr penumbraType = Metadata::value<StringData>( metadataTarget, "penumbraType" );
+
+		float innerAngle = 0;
+		float outerAngle = 0;
+
+		if( !penumbraType || penumbraType->readable() == "inset" )
+		{
+			outerAngle = coneAngle;
+			innerAngle = coneAngle - 2.0f * penumbraAngle;
+		}
+		else if( penumbraType->readable() == "outset" )
+		{
+			outerAngle = coneAngle + 2.0f * penumbraAngle;
+			innerAngle = coneAngle ;
+		}
+		else if( penumbraType->readable() == "absolute" )
+		{
+			outerAngle = coneAngle;
+			innerAngle = penumbraAngle;
 		}
 
 		result->addChild( const_pointer_cast<IECoreGL::Renderable>( spotlightCone( innerAngle, outerAngle ) ) );
