@@ -240,7 +240,18 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	}
 	else if( type->readable() == "distant" )
 	{
-		result->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
+		for ( int i = 0; i < 3; i++ )
+		{	
+			IECoreGL::GroupPtr rayGroup = new IECoreGL::Group();
+
+			Imath::M44f trans;
+			trans.rotate( V3f( 0, 0, 2.0 * M_PI / 3.0 * i ) );
+			trans.translate( V3f( 0, 0.4, 0.5 ) );
+			rayGroup->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
+			rayGroup->setTransform( trans );
+			
+			result->addChild( rayGroup );
+		}
 	}
 
 	const Color3f color = parameter<Color3f>( metadataTarget, light, "colorParameter", Color3f( 1.0f ) );
