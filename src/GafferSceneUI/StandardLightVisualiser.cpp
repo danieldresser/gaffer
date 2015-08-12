@@ -34,12 +34,15 @@
 //
 //////////////////////////////////////////////////////////////////////////
 
+#include "IECore/MeshPrimitive.h"
+
 #include "IECoreGL/CurvesPrimitive.h"
 #include "IECoreGL/Group.h"
 #include "IECoreGL/ShaderStateComponent.h"
 #include "IECoreGL/ShaderLoader.h"
 #include "IECoreGL/TextureLoader.h"
 #include "IECoreGL/DiskPrimitive.h"
+#include "IECoreGL/ToGLMeshConverter.h"
 
 #include "Gaffer/Metadata.h"
 
@@ -123,6 +126,31 @@ void addCircle( const V3f &center, float radius, vector<int> &vertsPerCurve, vec
 	vertsPerCurve.push_back( numDivisions );
 }
 
+void addSolidArc( int axis, const V3f &center, float majorRadius, float minorRadius, float startFraction, float stopFraction, vector<int> &vertsPerPoly, vector<int> &vertIds, vector<V3f> &p )
+{
+	const int numSegmentsForCircle = 100;
+	int numSegments = (int)ceil( (stopFraction - startFraction) * numSegmentsForCircle );
+
+	int start = p.size();
+	for( int i = 0; i < numSegments + 1; ++i )
+	{
+		const float angle = 2 * M_PI * ( startFraction + (stopFraction - startFraction) * (float)i/(float)(numSegments) );
+		V3f dir( -sin( angle ), cos( angle ), 0 );
+		if( axis == 0 ) dir = V3f( 0, dir[1], -dir[0] );
+		else if( axis == 1 ) dir = V3f( dir[1], 0, dir[0] );
+		p.push_back( center + majorRadius * dir );
+		p.push_back( center + minorRadius * dir );
+	}
+	for( int i = 0; i < numSegments; ++i )
+	{
+		vertIds.push_back( start + i * 2 );
+		vertIds.push_back( start + i * 2  + 1);
+		vertIds.push_back( start + i * 2  + 3);
+		vertIds.push_back( start + i * 2  + 2);
+		vertsPerPoly.push_back( 4 );
+	}
+}
+
 void addCone( float angle, vector<int> &vertsPerCurve, vector<V3f> &p )
 {
 	const float halfAngle = 0.5 * M_PI * angle / 180.0;
@@ -137,37 +165,6 @@ void addCone( float angle, vector<int> &vertsPerCurve, vector<V3f> &p )
 	p.push_back( V3f( 0 ) );
 	p.push_back( V3f( 0, -baseRadius, -1 ) );
 	vertsPerCurve.push_back( 2 );
-}
-
-const char *colorIndicatorFragmentSource()
-{
-
-	return
-
-	"#include \"IECoreGL/ColorAlgo.h\"\n"
-	""
-	"#if __VERSION__ <= 120\n"
-	"#define in varying\n"
-	"#endif\n"
-	""
-	"uniform vec3 color;"
-	"uniform float intensity;"
-	""
-	"in vec2 fragmentst;"
-	""
-	"void main()"
-	"{"
-	"	float r = 2.0 * length( fragmentst - vec2( 0.5 ) );"
-	"	vec3 innerColor = color * intensity;"
-	"	vec3 outerColor = color;"
-	"	if( intensity < 1.0 )"
-	"	{"
-	"		outerColor *= intensity;"
-	"	}"
-	"	vec3 c = mix( innerColor, outerColor, r );"
-	"	gl_FragColor = vec4( ieLinToSRGB( c ), 1 );"
-	"}";
-
 }
 
 } // namespace
@@ -195,10 +192,13 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	InternedString metadataTarget = "light:" + light->getName();
 	ConstStringDataPtr type = Metadata::value<StringData>( metadataTarget, "type" );
 
+	bool indicatorFaceCamera = false;
+ 
 	GroupPtr result = new Group;
 	if( !type || type->readable() == "point" )
 	{
 		result->addChild( const_pointer_cast<IECoreGL::Renderable>( pointRays() ) );
+		indicatorFaceCamera = true;
 	}
 	else if( type->readable() == "spot" )
 	{
@@ -247,7 +247,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	const float intensity = parameter<float>( metadataTarget, light, "intensityParameter", 1 );
 	const float exposure = parameter<float>( metadataTarget, light, "exposureParameter", 0 );
 
-	result->addChild( const_pointer_cast<IECoreGL::Renderable>( colorIndicator( color, intensity * pow( 2.0f, exposure ) ) ) );
+	result->addChild( const_pointer_cast<IECoreGL::Renderable>( colorIndicator( color * intensity * pow( 2.0f, exposure ), indicatorFaceCamera ) ) );
 
 	return result;
 }
@@ -431,18 +431,69 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::spotlightCone( float inner
 	return group;
 }
 
-IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imath::Color3f &color, float intensity )
+IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imath::Color3f &color, bool faceCamera )
 {
+
+	float maxChannel = std::max( color[0], std::max( color[1], color[2] ) );
+	float exposure = 0;
+	Imath::Color3f indicatorColor = color;
+	if( maxChannel > 1 )
+	{
+		indicatorColor = color / maxChannel;
+		exposure = log( maxChannel ) / log( 2 );
+	}
 	IECoreGL::GroupPtr group = new IECoreGL::Group();
 
-	group->addChild( new DiskPrimitive( 0.1f ) );
-
 	IECore::CompoundObjectPtr parameters = new CompoundObject;
-	parameters->members()["color"] = new Color3fData( color );
-	parameters->members()["intensity"] = new FloatData( intensity );
+	parameters->members()["aimType"] = new IntData( 1 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), "", "", colorIndicatorFragmentSource(), parameters )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCamera ? faceCameraVertexSource() : "", "", Shader::constantFragmentSource(), parameters )
 	);
+
+	float indicatorRad = 0.3;
+	int indicatorAxis = faceCamera ? 0 : 2;
+
+	{
+		IntVectorDataPtr vertsPerPoly = new IntVectorData;
+		IntVectorDataPtr vertIds = new IntVectorData;
+		V3fVectorDataPtr p = new V3fVectorData;
+
+		addSolidArc( indicatorAxis, V3f( 0 ), indicatorRad * 0.4, 0.0, 0, 1, vertsPerPoly->writable(), vertIds->writable(), p->writable() );
+		addSolidArc( indicatorAxis, V3f( 0 ), indicatorRad, indicatorRad * 0.9, 0, 1, vertsPerPoly->writable(), vertIds->writable(), p->writable() );
+
+		for( int i = 0; i < exposure && i < 20; i++ )
+		{
+			float startAngle = 1 - pow( 0.875, i );
+			float endAngle = 1 - pow( 0.875, std::min( i+1.0, (double)exposure ) );
+			float maxEndAngle = 1 - pow( 0.875, i+1.0);
+			float sectorScale = ( maxEndAngle - startAngle - 0.008 ) / ( maxEndAngle - startAngle );
+			addSolidArc( indicatorAxis, V3f( 0 ), indicatorRad * 0.85, indicatorRad * 0.45, startAngle, startAngle + ( endAngle - startAngle ) * sectorScale, vertsPerPoly->writable(), vertIds->writable(), p->writable() );
+		}
+
+		IECore::MeshPrimitivePtr mesh = new IECore::MeshPrimitive( vertsPerPoly, vertIds, "linear", p );
+		mesh->variables["N"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new V3fData( V3f( 0 ) ) );
+		mesh->variables["Cs"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new Color3fData( indicatorColor ) );
+		ToGLMeshConverterPtr meshConverter = new ToGLMeshConverter( mesh );
+		group->addChild( IECore::runTimeCast<IECoreGL::Renderable>( meshConverter->convert() ) );
+	}
+
+	// For exposures greater than 20, draw an additional solid bar of a darker color at the very end, without any segment dividers
+	if( exposure > 20 )
+	{
+		IntVectorDataPtr vertsPerPoly = new IntVectorData;
+		IntVectorDataPtr vertIds = new IntVectorData;
+		V3fVectorDataPtr p = new V3fVectorData;
+
+		float startAngle = 1 - pow( 0.875, 20 );
+		float endAngle = 1 - pow( 0.875, (double)exposure );
+		addSolidArc( indicatorAxis, V3f( 0 ), indicatorRad * 0.85, indicatorRad * 0.45, startAngle, endAngle, vertsPerPoly->writable(), vertIds->writable(), p->writable() );
+
+		IECore::MeshPrimitivePtr mesh = new IECore::MeshPrimitive( vertsPerPoly, vertIds, "linear", p );
+		mesh->variables["N"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new V3fData( V3f( 0 ) ) );
+		mesh->variables["Cs"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new Color3fData( 0.5f * indicatorColor ) );
+		ToGLMeshConverterPtr meshConverter = new ToGLMeshConverter( mesh );
+		group->addChild( IECore::runTimeCast<IECoreGL::Renderable>( meshConverter->convert() ) );
+	}
 
 	return group;
 }
