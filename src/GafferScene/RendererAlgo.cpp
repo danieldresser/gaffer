@@ -232,7 +232,7 @@ bool outputLight( const ScenePlug *scene, const ScenePlug::ScenePath &path, IECo
 		renderer->concatTransform( transform );
 
 		InternedString metadataTarget = "light:" + constLight->getName();
-		ConstM44fDataPtr orientation = Metadata::value<M44fData>( metadataTarget, "orientation" );
+		ConstM44fDataPtr orientation = Metadata::value<M44fData>( metadataTarget, "renderOrientation" );
 		if( orientation )
 		{
 			renderer->concatTransform( orientation->readable() );
