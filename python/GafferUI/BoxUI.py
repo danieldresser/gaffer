@@ -200,6 +200,9 @@ for nodeType in ( Gaffer.Box, Gaffer.Reference ) :
 
 	GafferUI.PlugValueWidget.registerCreator( nodeType, "*" , __plugValueWidgetCreator )
 
+# TODO - this doesn't seem to be working, I can still edit things on the user plug of a box?
+GafferUI.PlugValueWidget.registerCreator( Gaffer.Box, "user", GafferUI.UserPlugValueWidget, editable = False )
+
 # Shared menu code
 ##########################################################################
 
