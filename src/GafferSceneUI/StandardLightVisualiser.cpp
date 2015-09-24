@@ -455,12 +455,15 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imat
 		exposure = log( maxChannel ) / log( 2 );
 	}
 	IECoreGL::GroupPtr group = new IECoreGL::Group();
+	IECoreGL::GroupPtr wirelessGroup = new IECoreGL::Group();
 
 	IECore::CompoundObjectPtr parameters = new CompoundObject;
 	parameters->members()["aimType"] = new IntData( 1 );
 	group->getState()->add(
 		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCamera ? faceCameraVertexSource() : "", "", Shader::constantFragmentSource(), parameters )
 	);
+
+	wirelessGroup->getState()->add( new IECoreGL::Primitive::DrawWireframe( false ) );
 
 	float indicatorRad = 0.3;
 	int indicatorAxis = faceCamera ? 0 : 2;
@@ -470,8 +473,20 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imat
 		IntVectorDataPtr vertIds = new IntVectorData;
 		V3fVectorDataPtr p = new V3fVectorData;
 
-		addSolidArc( indicatorAxis, V3f( 0 ), indicatorRad * 0.4, 0.0, 0, 1, vertsPerPoly->writable(), vertIds->writable(), p->writable() );
 		addSolidArc( indicatorAxis, V3f( 0 ), indicatorRad, indicatorRad * 0.9, 0, 1, vertsPerPoly->writable(), vertIds->writable(), p->writable() );
+
+		IECore::MeshPrimitivePtr mesh = new IECore::MeshPrimitive( vertsPerPoly, vertIds, "linear", p );
+		mesh->variables["N"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new V3fData( V3f( 0 ) ) );
+		mesh->variables["Cs"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new Color3fData( indicatorColor ) );
+		ToGLMeshConverterPtr meshConverter = new ToGLMeshConverter( mesh );
+		group->addChild( IECore::runTimeCast<IECoreGL::Renderable>( meshConverter->convert() ) );
+	}
+	{
+		IntVectorDataPtr vertsPerPoly = new IntVectorData;
+		IntVectorDataPtr vertIds = new IntVectorData;
+		V3fVectorDataPtr p = new V3fVectorData;
+
+		addSolidArc( indicatorAxis, V3f( 0 ), indicatorRad * 0.4, 0.0, 0, 1, vertsPerPoly->writable(), vertIds->writable(), p->writable() );
 
 		for( int i = 0; i < exposure && i < 20; i++ )
 		{
@@ -486,7 +501,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imat
 		mesh->variables["N"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new V3fData( V3f( 0 ) ) );
 		mesh->variables["Cs"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new Color3fData( indicatorColor ) );
 		ToGLMeshConverterPtr meshConverter = new ToGLMeshConverter( mesh );
-		group->addChild( IECore::runTimeCast<IECoreGL::Renderable>( meshConverter->convert() ) );
+		wirelessGroup->addChild( IECore::runTimeCast<IECoreGL::Renderable>( meshConverter->convert() ) );
 	}
 
 	// For exposures greater than 20, draw an additional solid bar of a darker color at the very end, without any segment dividers
@@ -504,8 +519,10 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imat
 		mesh->variables["N"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new V3fData( V3f( 0 ) ) );
 		mesh->variables["Cs"] = IECore::PrimitiveVariable( IECore::PrimitiveVariable::Constant, new Color3fData( 0.5f * indicatorColor ) );
 		ToGLMeshConverterPtr meshConverter = new ToGLMeshConverter( mesh );
-		group->addChild( IECore::runTimeCast<IECoreGL::Renderable>( meshConverter->convert() ) );
+		wirelessGroup->addChild( IECore::runTimeCast<IECoreGL::Renderable>( meshConverter->convert() ) );
 	}
+
+	group->addChild( wirelessGroup );
 
 	return group;
 }
