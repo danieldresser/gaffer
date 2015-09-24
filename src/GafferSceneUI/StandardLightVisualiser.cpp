@@ -154,16 +154,17 @@ void addSolidArc( int axis, const V3f &center, float majorRadius, float minorRad
 void addCone( float angle, vector<int> &vertsPerCurve, vector<V3f> &p )
 {
 	const float halfAngle = 0.5 * M_PI * angle / 180.0;
-	const float baseRadius = tan( halfAngle );
+	const float baseRadius = sin( halfAngle );
+	const float baseDistance = cos( halfAngle );
 
-	addCircle( V3f( 0, 0, -1 ), baseRadius, vertsPerCurve, p );
+	addCircle( V3f( 0, 0, -baseDistance ), baseRadius, vertsPerCurve, p );
 
 	p.push_back( V3f( 0 ) );
-	p.push_back( V3f( 0, baseRadius, -1 ) );
+	p.push_back( V3f( 0, baseRadius, -baseDistance ) );
 	vertsPerCurve.push_back( 2 );
 
 	p.push_back( V3f( 0 ) );
-	p.push_back( V3f( 0, -baseRadius, -1 ) );
+	p.push_back( V3f( 0, -baseRadius, -baseDistance ) );
 	vertsPerCurve.push_back( 2 );
 }
 
