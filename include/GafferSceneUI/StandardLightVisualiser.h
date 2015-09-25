@@ -62,6 +62,7 @@ class StandardLightVisualiser : public LightVisualiser
 	protected :
 
 		static const char *faceCameraVertexSource();
+		static const char *environmentLightDrawFragSource();
 
 		static IECoreGL::ConstRenderablePtr ray();
 		static IECoreGL::ConstRenderablePtr pointRays();

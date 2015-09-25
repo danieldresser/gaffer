@@ -37,6 +37,7 @@
 #include "IECore/MeshPrimitive.h"
 
 #include "IECoreGL/CurvesPrimitive.h"
+#include "IECoreGL/SpherePrimitive.h"
 #include "IECoreGL/Group.h"
 #include "IECoreGL/ShaderStateComponent.h"
 #include "IECoreGL/ShaderLoader.h"
@@ -195,7 +196,50 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 
 	bool indicatorFaceCamera = false;
  
+	const Color3f color = parameter<Color3f>( metadataTarget, light, "colorParameter", Color3f( 1.0f ) );
+	const float intensity = parameter<float>( metadataTarget, light, "intensityParameter", 1 );
+	const float exposure = parameter<float>( metadataTarget, light, "exposureParameter", 0 );
+
+	const Color3f finalColor = color * intensity * pow( 2.0f, exposure );
+
 	GroupPtr result = new Group;
+
+	const float locatorScale = parameter<float>( metadataTarget, light, "locatorScaleParameter", 1 );
+	Imath::M44f topTrans;
+	topTrans.scale( V3f( locatorScale ) );
+	result->setTransform( topTrans );
+
+	if( type->readable() == "environment" )
+	{
+		IECoreGL::GroupPtr sphereGroup = new IECoreGL::Group();
+
+		Imath::M44f trans;
+		trans.scale( V3f( 1, 1, -1 ) );
+		trans.rotate( V3f( -0.5 * M_PI, 0, 0 ) );
+		sphereGroup->setTransform( trans );
+
+		IECoreGL::SpherePrimitivePtr sphere = new IECoreGL::SpherePrimitive();
+		sphereGroup->addChild( sphere );
+
+		const std::string textureName = parameter<std::string>( metadataTarget, light, "textureNameParameter", "" );
+	
+		IECore::CompoundObjectPtr parameters = new CompoundObject;
+		parameters->members()["lightMultiplier"] = new Color3fData( finalColor );
+		parameters->members()["previewOpacity"] = new FloatData( 1 );
+		parameters->members()["mapSampler"] = new StringData( textureName );
+		sphereGroup->getState()->add(
+			new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
+		);
+		sphereGroup->getState()->add(
+			new IECoreGL::DoubleSidedStateComponent( false )
+		);
+		
+		result->addChild( sphereGroup );
+		return result;
+	}
+
+	
+
 	if( !type || type->readable() == "point" )
 	{
 		result->addChild( const_pointer_cast<IECoreGL::Renderable>( pointRays() ) );
@@ -255,11 +299,9 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 		}
 	}
 
-	const Color3f color = parameter<Color3f>( metadataTarget, light, "colorParameter", Color3f( 1.0f ) );
-	const float intensity = parameter<float>( metadataTarget, light, "intensityParameter", 1 );
-	const float exposure = parameter<float>( metadataTarget, light, "exposureParameter", 0 );
+	result->addChild( const_pointer_cast<IECoreGL::Renderable>( colorIndicator( finalColor, indicatorFaceCamera ) ) );
 
-	result->addChild( const_pointer_cast<IECoreGL::Renderable>( colorIndicator( color * intensity * pow( 2.0f, exposure ), indicatorFaceCamera ) ) );
+
 
 	return result;
 }
@@ -341,6 +383,28 @@ const char *StandardLightVisualiser::faceCameraVertexSource()
 		"	fragmentCs = geometryCs;"
 		"}"
 
+	;
+}
+
+const char *StandardLightVisualiser::environmentLightDrawFragSource()
+{
+	return
+		"#version 150 compatibility\n"
+		""
+		"#include \"IECoreGL/ColorAlgo.h\"\n"
+		""
+		"in vec2 fragmentst;"
+		""
+		"uniform vec3 lightMultiplier;"
+		"uniform float previewOpacity;"
+		""
+		"uniform sampler2D mapSampler;"
+		""
+		"void main()"
+		"{"
+			"vec3 c = texture2D( mapSampler, fragmentst ).xyz;"
+			"gl_FragColor = vec4( ieLinToSRGB( c * lightMultiplier ), previewOpacity );"
+		"}"
 	;
 }
 
