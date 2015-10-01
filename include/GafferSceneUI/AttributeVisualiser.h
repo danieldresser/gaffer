@@ -57,6 +57,9 @@ class AttributeVisualiser : public IECore::RefCounted
 			std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state ) const = 0;
 
 };
+
+inline AttributeVisualiser::~AttributeVisualiser() { }
+
 IE_CORE_DECLAREPTR( AttributeVisualiser )
 
 class AttributeVisualiserRegistry
