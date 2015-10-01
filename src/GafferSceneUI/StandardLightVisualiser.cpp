@@ -35,6 +35,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include "IECore/MeshPrimitive.h"
+#include "IECore/Shader.h"
 
 #include "IECoreGL/CurvesPrimitive.h"
 #include "IECoreGL/SpherePrimitive.h"
@@ -66,7 +67,7 @@ namespace
 {
 
 template<typename T>
-T parameter( InternedString metadataTarget, const Light *light, InternedString parameterNameMetadata, T defaultValue )
+T parameter( InternedString metadataTarget, const IECore::Shader *lightShader, InternedString parameterNameMetadata, T defaultValue )
 {
 	ConstStringDataPtr parameterName = Metadata::value<StringData>( metadataTarget, parameterNameMetadata );
 	if( !parameterName )
@@ -76,7 +77,7 @@ T parameter( InternedString metadataTarget, const Light *light, InternedString p
 
 	typedef IECore::TypedData<T> DataType;
 	/// \todo Add a const version of Light::parametersData() so we don't need the cast.
-	if( const DataType *parameterData = const_cast<Light *>( light )->parametersData()->member<DataType>( parameterName->readable() ) )
+	if( const DataType *parameterData = const_cast<IECore::Shader *>( lightShader )->parametersData()->member<DataType>( parameterName->readable() ) )
 	{
 		return parameterData->readable();
 	}
@@ -175,6 +176,8 @@ void addCone( float angle, vector<int> &vertsPerCurve, vector<V3f> &p )
 // StandardLightVisualiser implementation.
 //////////////////////////////////////////////////////////////////////////
 
+AttributeVisualiserRegistry::AttributeVisualiserDescription<StandardLightVisualiser> StandardLightVisualiser::g_visualiserDescription;
+
 StandardLightVisualiser::StandardLightVisualiser()
 {
 }
@@ -183,28 +186,35 @@ StandardLightVisualiser::~StandardLightVisualiser()
 {
 }
 
-IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::Object *object ) const
+void StandardLightVisualiser::visualise( const IECore::CompoundObject *attributes,
+            std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state ) const
 {
-	const IECore::Light *light = runTimeCast<const IECore::Light>( object );
-	if( !light )
+	
+	//const IECore::Shader *lightShader = runTimeCast<const IECore::Shader>( object );
+	const IECore::Shader *lightShader = attributes->member<const IECore::Shader>( "ri:light" );
+	if( !lightShader )
 	{
-		return NULL;
+		return;
 	}
 
-	InternedString metadataTarget = "light:" + light->getName();
+
+	InternedString metadataTarget = "light:" + lightShader->getName();
+	std::cerr << "MetadataTarget:" << metadataTarget << "\n";
 	ConstStringDataPtr type = Metadata::value<StringData>( metadataTarget, "type" );
+
+	std::cerr << "Trying to visualise: " << type->readable() << "\n";
 
 	bool indicatorFaceCamera = false;
  
-	const Color3f color = parameter<Color3f>( metadataTarget, light, "colorParameter", Color3f( 1.0f ) );
-	const float intensity = parameter<float>( metadataTarget, light, "intensityParameter", 1 );
-	const float exposure = parameter<float>( metadataTarget, light, "exposureParameter", 0 );
+	const Color3f color = parameter<Color3f>( metadataTarget, lightShader, "colorParameter", Color3f( 1.0f ) );
+	const float intensity = parameter<float>( metadataTarget, lightShader, "intensityParameter", 1 );
+	const float exposure = parameter<float>( metadataTarget, lightShader, "exposureParameter", 0 );
 
 	const Color3f finalColor = color * intensity * pow( 2.0f, exposure );
 
 	GroupPtr result = new Group;
 
-	const float locatorScale = parameter<float>( metadataTarget, light, "locatorScaleParameter", 1 );
+	const float locatorScale = parameter<float>( metadataTarget, lightShader, "locatorScaleParameter", 1 );
 	Imath::M44f topTrans;
 	topTrans.scale( V3f( locatorScale ) );
 	result->setTransform( topTrans );
@@ -221,21 +231,21 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 		IECoreGL::SpherePrimitivePtr sphere = new IECoreGL::SpherePrimitive();
 		sphereGroup->addChild( sphere );
 
-		const std::string textureName = parameter<std::string>( metadataTarget, light, "textureNameParameter", "" );
+		const std::string textureName = parameter<std::string>( metadataTarget, lightShader, "textureNameParameter", "" );
 	
 		IECore::CompoundObjectPtr parameters = new CompoundObject;
 		parameters->members()["lightMultiplier"] = new Color3fData( finalColor );
 		parameters->members()["previewOpacity"] = new FloatData( 1 );
 		parameters->members()["mapSampler"] = new StringData( textureName );
 		sphereGroup->getState()->add(
-			new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
+			new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), IECoreGL::Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
 		);
 		sphereGroup->getState()->add(
 			new IECoreGL::DoubleSidedStateComponent( false )
 		);
 		
 		result->addChild( sphereGroup );
-		return result;
+		renderables.push_back( result );
 	}
 
 	
@@ -247,8 +257,8 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 	}
 	else if( type->readable() == "spot" )
 	{
-		float coneAngle = parameter<float>( metadataTarget, light, "coneAngleParameter", 0.0f );
-		float penumbraAngle = parameter<float>( metadataTarget, light, "penumbraAngleParameter", 0.0f );
+		float coneAngle = parameter<float>( metadataTarget, lightShader, "coneAngleParameter", 0.0f );
+		float penumbraAngle = parameter<float>( metadataTarget, lightShader, "penumbraAngleParameter", 0.0f );
 
 		if( ConstStringDataPtr angleUnit = Metadata::value<StringData>( metadataTarget, "angleUnit" ) )
 		{
@@ -303,7 +313,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::visualise( const IECore::O
 
 
 
-	return result;
+	renderables.push_back( result );
 }
 
 const char *StandardLightVisualiser::faceCameraVertexSource()
@@ -416,7 +426,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::ray()
 	IECore::CompoundObjectPtr parameters = new CompoundObject;
 	parameters->members()["aimType"] = new IntData( 0 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), parameters )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", IECoreGL::Shader::constantFragmentSource(), parameters )
 	);
 
 	IntVectorDataPtr vertsPerCurve = new IntVectorData;
@@ -440,7 +450,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::pointRays()
 	IECore::CompoundObjectPtr parameters = new CompoundObject;
 	parameters->members()["aimType"] = new IntData( 1 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), parameters )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", IECoreGL::Shader::constantFragmentSource(), parameters )
 	);
 
 	IntVectorDataPtr vertsPerCurve = new IntVectorData;
@@ -473,7 +483,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::spotlightCone( float inner
 	IECore::CompoundObjectPtr parameters = new CompoundObject;
 	parameters->members()["aimType"] = new IntData( 0 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", Shader::constantFragmentSource(), parameters )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCameraVertexSource(), "", IECoreGL::Shader::constantFragmentSource(), parameters )
 	);
 
 	IntVectorDataPtr vertsPerCurve = new IntVectorData;
@@ -524,7 +534,7 @@ IECoreGL::ConstRenderablePtr StandardLightVisualiser::colorIndicator( const Imat
 	IECore::CompoundObjectPtr parameters = new CompoundObject;
 	parameters->members()["aimType"] = new IntData( 1 );
 	group->getState()->add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCamera ? faceCameraVertexSource() : "", "", Shader::constantFragmentSource(), parameters )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), faceCamera ? faceCameraVertexSource() : "", "", IECoreGL::Shader::constantFragmentSource(), parameters )
 	);
 
 	wirelessGroup->getState()->add( new IECoreGL::Primitive::DrawWireframe( false ) );

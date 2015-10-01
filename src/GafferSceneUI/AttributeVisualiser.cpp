@@ -1,6 +1,6 @@
 //////////////////////////////////////////////////////////////////////////
 //
-//  Copyright (c) 2015, John Haddon. All rights reserved.
+//  Copyright (c) 2015, Image Engine. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are
@@ -34,71 +34,36 @@
 //
 //////////////////////////////////////////////////////////////////////////
 
-#include "boost/container/flat_map.hpp"
+#include "GafferSceneUI/AttributeVisualiser.h"
 
-#include "IECoreGL/CurvesPrimitive.h"
-#include "IECoreGL/Group.h"
-
-#include "GafferSceneUI/LightVisualiser.h"
-//#include "GafferSceneUI/StandardLightVisualiser.h"
-
-using namespace std;
-using namespace Imath;
 using namespace GafferSceneUI;
-
-//////////////////////////////////////////////////////////////////////////
-// Internal implementation details
-//////////////////////////////////////////////////////////////////////////
 
 namespace
 {
 
-typedef boost::container::flat_map<IECore::InternedString, ConstLightVisualiserPtr> LightVisualisers;
-LightVisualisers &lightVisualisers()
+ConstAttributeVisualiserPtr foo;
+
+typedef std::vector<ConstAttributeVisualiserPtr> AttributeVisualisers;
+
+AttributeVisualisers &visualisers()
 {
-	static LightVisualisers l;
-	return l;
+	static AttributeVisualisers v;
+	return v;
 }
 
 } // namespace
 
-//////////////////////////////////////////////////////////////////////////
-// LightVisualiser class
-//////////////////////////////////////////////////////////////////////////
-
-Visualiser::VisualiserDescription<LightVisualiser> LightVisualiser::g_visualiserDescription;
-
-LightVisualiser::LightVisualiser()
+void AttributeVisualiserRegistry::visualise( const IECore::CompoundObject *attributes,
+            std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state )
 {
-}
-
-LightVisualiser::~LightVisualiser()
-{
-}
-
-IECoreGL::ConstRenderablePtr LightVisualiser::visualise( const IECore::Object *object ) const
-{
-	const IECore::Light *light = IECore::runTimeCast<const IECore::Light>( object );
-	if( !light )
+	const AttributeVisualisers &v = visualisers();
+	for( unsigned int i = 0; i < v.size(); i++ )
 	{
-		return NULL;
-	}
-
-	const LightVisualisers &l = lightVisualisers();
-	LightVisualisers::const_iterator it = l.find( light->getName() );
-	if( it != l.end() )
-	{
-		return it->second->visualise( object );
-	}
-	else
-	{
-		//static StandardLightVisualiserPtr g_defaultVisualiser = new StandardLightVisualiser();
-		//return g_defaultVisualiser->visualise( object );
-		return NULL;
+		v[i]->visualise( attributes, renderables, state );
 	}
 }
 
-void LightVisualiser::registerLightVisualiser( const IECore::InternedString &name, ConstLightVisualiserPtr visualiser )
+void AttributeVisualiserRegistry::registerVisualiser( ConstAttributeVisualiserPtr visualiser )
 {
-	lightVisualisers()[name] = visualiser;
+	visualisers().push_back( visualiser );
 }

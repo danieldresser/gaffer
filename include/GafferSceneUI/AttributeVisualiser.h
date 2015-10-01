@@ -1,6 +1,6 @@
 //////////////////////////////////////////////////////////////////////////
 //
-//  Copyright (c) 2015, John Haddon. All rights reserved.
+//  Copyright (c) 2015, Image Engine. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are
@@ -34,48 +34,54 @@
 //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef GAFFERSCENEUI_STANDARDLIGHTVISUALISER_H
-#define GAFFERSCENEUI_STANDARDLIGHTVISUALISER_H
+#ifndef GAFFERSCENEUI_ATTRIBUTEVISUALISER_H
+#define GAFFERSCENEUI_ATTRIBUTEVISUALISER_H
 
-#include "GafferSceneUI/AttributeVisualiser.h"
+#include "IECore/Light.h"
+
+#include "GafferSceneUI/Visualiser.h"
+#include "IECore/CompoundObject.h"
 
 namespace GafferSceneUI
 {
 
-/// Class for performing standard visualisations of lights,
-/// by mapping shader parameters to features of the visualisation.
-/// This also provides several protected utility methods for
-/// making standard visualisations, so is suitable for use as
-/// a base class for custom light visualisers.
-class StandardLightVisualiser : public AttributeVisualiser
+class AttributeVisualiser : public IECore::RefCounted
 {
 
 	public :
 
-		IE_CORE_DECLAREMEMBERPTR( StandardLightVisualiser )
+		IE_CORE_DECLAREMEMBERPTR( AttributeVisualiser )
 
-		StandardLightVisualiser();
-		virtual ~StandardLightVisualiser();
-
+		virtual ~AttributeVisualiser() = 0;
 		virtual void visualise( const IECore::CompoundObject *attributes,
-            std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state ) const;
+			std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state ) const = 0;
 
-
-	protected :
-
-		static const char *faceCameraVertexSource();
-		static const char *environmentLightDrawFragSource();
-
-		static IECoreGL::ConstRenderablePtr ray();
-		static IECoreGL::ConstRenderablePtr pointRays();
-		static IECoreGL::ConstRenderablePtr spotlightCone( float innerAngle, float outerAngle );
-		static IECoreGL::ConstRenderablePtr colorIndicator( const Imath::Color3f &color, bool indicatorFaceCamera = true );
-
-		static AttributeVisualiserRegistry::AttributeVisualiserDescription<StandardLightVisualiser> g_visualiserDescription;
 };
+IE_CORE_DECLAREPTR( AttributeVisualiser )
 
-IE_CORE_DECLAREPTR( StandardLightVisualiser )
+class AttributeVisualiserRegistry
+{
+
+	public :
+
+		static void visualise( const IECore::CompoundObject *attributes,
+			std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state );
+
+		/// Registers a visualiser to use for the specified light type.
+		static void registerVisualiser( ConstAttributeVisualiserPtr visualiser );
+
+		template<typename VisualiserType>
+        struct AttributeVisualiserDescription
+        {
+
+            AttributeVisualiserDescription()
+            {
+                registerVisualiser( new VisualiserType );
+            }
+
+        };
+};
 
 } // namespace GafferSceneUI
 
-#endif // GAFFERSCENEUI_STANDARDLIGHTVISUALISER_H
+#endif // GAFFERSCENEUI_ATTRIBUTEVISUALISER_H
