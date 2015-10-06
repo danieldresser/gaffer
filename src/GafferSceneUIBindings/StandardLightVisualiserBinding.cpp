@@ -44,7 +44,6 @@ using namespace GafferSceneUI;
 void GafferSceneUIBindings::bindStandardLightVisualiser()
 {
 
-	IECorePython::RefCountedClass<StandardLightVisualiser, AttributeVisualiser>( "StandardLightVisualiser" )
-	;
+	//IECorePython::RefCountedClass<StandardLightVisualiser, AttributeVisualiser>( "StandardLightVisualiser" );
 
 }
