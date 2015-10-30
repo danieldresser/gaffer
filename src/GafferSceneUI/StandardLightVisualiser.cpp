@@ -186,89 +186,52 @@ StandardLightVisualiser::~StandardLightVisualiser()
 {
 }
 
-void StandardLightVisualiser::visualise( const IECore::CompoundObject *attributes,
-            std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state ) const
+void StandardLightVisualiser::addEnvLightVisualiser( GroupPtr &output, IECoreGL::State &state, const std::string &metadataTarget, const IECore::Shader *lightShader, Color3f multiplier )
 {
-	//const IECore::Shader *lightShader = runTimeCast<const IECore::Shader>( object );
-	const IECore::Shader *lightShader = attributes ? attributes->member<const IECore::Shader>( "ri:light" ) : NULL;
-	if( !lightShader )
-	{
-		return;
-	}
+	IECoreGL::GroupPtr sphereGroup = new IECoreGL::Group();
 
+	Imath::M44f trans;
+	trans.scale( V3f( 1, 1, -1 ) );
+	trans.rotate( V3f( -0.5 * M_PI, 0, 0 ) );
+	sphereGroup->setTransform( trans );
 
-	InternedString metadataTarget = "light:" + lightShader->getName();
-	std::cerr << "MetadataTarget:" << metadataTarget << "\n";
-	ConstStringDataPtr type = Metadata::value<StringData>( metadataTarget, "type" );
+	IECoreGL::SpherePrimitivePtr sphere = new IECoreGL::SpherePrimitive();
+	sphereGroup->addChild( sphere );
 
-	if( type ) std::cerr << "Trying to visualise: " << type->readable() << "\n";
+	const std::string textureName = parameter<std::string>( metadataTarget, lightShader, "textureNameParameter", "" );
 
+	IECore::CompoundObjectPtr parameters = new CompoundObject;
+	parameters->members()["lightMultiplier"] = new Color3fData( multiplier );
+	parameters->members()["previewOpacity"] = new FloatData( 1 );
+	parameters->members()["mapSampler"] = new StringData( textureName );
+	sphereGroup->getState()->add(
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), IECoreGL::Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
+	);
+	sphereGroup->getState()->add(
+		new IECoreGL::DoubleSidedStateComponent( false )
+	);
+	
+	output->addChild( sphereGroup );
+}
+
+void StandardLightVisualiser::addAreaLightVisualiser( IECoreGL::State &state, const std::string &metadataTarget, const IECore::Shader *lightShader, Color3f multiplier )
+{
+	const std::string textureName = parameter<std::string>( metadataTarget, lightShader, "textureNameParameter", "" );
+	IECore::CompoundObjectPtr parameters = new CompoundObject;
+	parameters->members()["lightMultiplier"] = new Color3fData( multiplier );
+	parameters->members()["previewOpacity"] = new FloatData( 1 );
+	parameters->members()["mapSampler"] = new StringData( textureName );
+	state.add(
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), IECoreGL::Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
+	);
+}
+
+void StandardLightVisualiser::addBasicLightVisualiser( ConstStringDataPtr type, GroupPtr &output, IECoreGL::State &state, const std::string &metadataTarget, const IECore::Shader *lightShader, Color3f multiplier )
+{
 	bool indicatorFaceCamera = false;
- 
-	const Color3f color = parameter<Color3f>( metadataTarget, lightShader, "colorParameter", Color3f( 1.0f ) );
-	const float intensity = parameter<float>( metadataTarget, lightShader, "intensityParameter", 1 );
-	const float exposure = parameter<float>( metadataTarget, lightShader, "exposureParameter", 0 );
-
-	std::cerr << "Exposure:" << exposure << "\n";
-
-	const Color3f finalColor = color * intensity * pow( 2.0f, exposure );
-
-	GroupPtr result = new Group;
-
-	const float locatorScale = parameter<float>( metadataTarget, lightShader, "locatorScaleParameter", 1 );
-	Imath::M44f topTrans;
-	topTrans.scale( V3f( locatorScale ) );
-	result->setTransform( topTrans );
-
-	if( type && type->readable() == "environment" )
-	{
-		IECoreGL::GroupPtr sphereGroup = new IECoreGL::Group();
-
-		Imath::M44f trans;
-		trans.scale( V3f( 1, 1, -1 ) );
-		trans.rotate( V3f( -0.5 * M_PI, 0, 0 ) );
-		sphereGroup->setTransform( trans );
-
-		IECoreGL::SpherePrimitivePtr sphere = new IECoreGL::SpherePrimitive();
-		sphereGroup->addChild( sphere );
-
-		const std::string textureName = parameter<std::string>( metadataTarget, lightShader, "textureNameParameter", "" );
-	
-		IECore::CompoundObjectPtr parameters = new CompoundObject;
-		parameters->members()["lightMultiplier"] = new Color3fData( finalColor );
-		parameters->members()["previewOpacity"] = new FloatData( 1 );
-		parameters->members()["mapSampler"] = new StringData( textureName );
-		sphereGroup->getState()->add(
-			new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), IECoreGL::Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
-		);
-		sphereGroup->getState()->add(
-			new IECoreGL::DoubleSidedStateComponent( false )
-		);
-		
-		result->addChild( sphereGroup );
-		renderables.push_back( result );
-		return;
-	}
-
-	if( type && type->readable() == "area" )
-	{
-		const std::string textureName = parameter<std::string>( metadataTarget, lightShader, "textureNameParameter", "" );
-	
-		IECore::CompoundObjectPtr parameters = new CompoundObject;
-		parameters->members()["lightMultiplier"] = new Color3fData( finalColor );
-		parameters->members()["previewOpacity"] = new FloatData( 1 );
-		parameters->members()["mapSampler"] = new StringData( textureName );
-		state.add(
-			new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), IECoreGL::Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
-		);
-		return;
-	}
-
-	
-
 	if( !type || type->readable() == "point" )
 	{
-		result->addChild( const_pointer_cast<IECoreGL::Renderable>( pointRays() ) );
+		output->addChild( const_pointer_cast<IECoreGL::Renderable>( pointRays() ) );
 		indicatorFaceCamera = true;
 	}
 	else if( type->readable() == "spot" )
@@ -306,8 +269,8 @@ void StandardLightVisualiser::visualise( const IECore::CompoundObject *attribute
 			innerAngle = penumbraAngle;
 		}
 
-		result->addChild( const_pointer_cast<IECoreGL::Renderable>( spotlightCone( innerAngle, outerAngle ) ) );
-		result->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
+		output->addChild( const_pointer_cast<IECoreGL::Renderable>( spotlightCone( innerAngle, outerAngle ) ) );
+		output->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
 	}
 	else if( type->readable() == "distant" )
 	{
@@ -321,15 +284,70 @@ void StandardLightVisualiser::visualise( const IECore::CompoundObject *attribute
 			rayGroup->addChild( const_pointer_cast<IECoreGL::Renderable>( ray() ) );
 			rayGroup->setTransform( trans );
 			
-			result->addChild( rayGroup );
+			output->addChild( rayGroup );
 		}
 	}
 
-	result->addChild( const_pointer_cast<IECoreGL::Renderable>( colorIndicator( finalColor, indicatorFaceCamera ) ) );
+	output->addChild( const_pointer_cast<IECoreGL::Renderable>( colorIndicator( multiplier, indicatorFaceCamera ) ) );
+}
 
+void StandardLightVisualiser::visualise( const IECore::CompoundObject *attributes,
+            std::vector< IECoreGL::ConstRenderablePtr> &renderables, IECoreGL::State &state ) const
+{
+	if( !attributes )
+	{
+		return;
+	}
+	
+	// TODO - this seems pretty expensive to do everywhere.  Could we have a way to only run this for locations
+	// in the __lights set?
+	for( IECore::CompoundObject::ObjectMap::const_iterator it = attributes->members().begin();
+		it != attributes->members().end(); it++ )
+	{
+		const std::string &key = it->first.string();
+		if( key.size() >= 6 && key.compare( key.length() - 6, 6, ":light" ) == 0 )
+		{
+			const IECore::Shader *lightShader = runTimeCast<const IECore::Shader>( it->second.get() );
+			if( !lightShader ) continue;
 
+			InternedString metadataTarget = key + ":" + lightShader->getName();
+			std::cerr << "MetadataTarget:" << metadataTarget << "\n";
 
-	renderables.push_back( result );
+			ConstStringDataPtr type = Metadata::value<StringData>( metadataTarget, "type" );
+			if( type ) std::cerr << "Trying to visualise: " << type->readable() << "\n";
+
+			const Color3f color = parameter<Color3f>( metadataTarget, lightShader, "colorParameter", Color3f( 1.0f ) );
+			const float intensity = parameter<float>( metadataTarget, lightShader, "intensityParameter", 1 );
+			const float exposure = parameter<float>( metadataTarget, lightShader, "exposureParameter", 0 );
+
+			std::cerr << "Exposure:" << exposure << "\n";
+
+			const Color3f finalColor = color * intensity * pow( 2.0f, exposure );
+
+			if( type && type->readable() == "area" )
+			{
+				addAreaLightVisualiser( state, metadataTarget, lightShader, finalColor );
+				continue;
+			}
+
+			GroupPtr result = new Group;
+
+			const float locatorScale = parameter<float>( metadataTarget, lightShader, "locatorScaleParameter", 1 );
+			Imath::M44f topTrans;
+			topTrans.scale( V3f( locatorScale ) );
+			result->setTransform( topTrans );
+
+			if( type && type->readable() == "environment" )
+			{
+				addEnvLightVisualiser( result, state, metadataTarget, lightShader, finalColor );
+			}
+			else
+			{
+				addBasicLightVisualiser( type, result, state, metadataTarget, lightShader, finalColor );
+			}
+			renderables.push_back( result );
+		}
+	}
 }
 
 const char *StandardLightVisualiser::faceCameraVertexSource()

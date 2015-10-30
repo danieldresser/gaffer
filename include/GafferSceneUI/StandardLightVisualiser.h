@@ -38,6 +38,10 @@
 #define GAFFERSCENEUI_STANDARDLIGHTVISUALISER_H
 
 #include "GafferSceneUI/AttributeVisualiser.h"
+#include "IECore/Shader.h"
+#include "IECore/SimpleTypedData.h"
+#include "IECoreGL/Group.h"
+
 
 namespace GafferSceneUI
 {
@@ -62,6 +66,9 @@ class StandardLightVisualiser : public AttributeVisualiser
 
 
 	protected :
+		static void addEnvLightVisualiser( IECoreGL::GroupPtr &output, IECoreGL::State &state, const std::string &metadataTarget, const IECore::Shader *lightShader, Imath::Color3f multiplier );
+		static void addAreaLightVisualiser( IECoreGL::State &state, const std::string &metadataTarget, const IECore::Shader *lightShader, Imath::Color3f multiplier );
+		static void addBasicLightVisualiser( IECore::ConstStringDataPtr type, IECoreGL::GroupPtr &output, IECoreGL::State &state, const std::string &metadataTarget, const IECore::Shader *lightShader, Imath::Color3f multiplier );
 
 		static const char *faceCameraVertexSource();
 		static const char *environmentLightDrawFragSource();
