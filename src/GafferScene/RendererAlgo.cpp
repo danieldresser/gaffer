@@ -41,6 +41,7 @@
 #include "IECore/Camera.h"
 #include "IECore/WorldBlock.h"
 #include "IECore/Light.h"
+#include "IECore/Shader.h"
 #include "IECore/AttributeBlock.h"
 #include "IECore/Display.h"
 #include "IECore/TransformBlock.h"
@@ -197,7 +198,7 @@ void outputLights( const ScenePlug *scene, const IECore::CompoundObject *globals
 
 bool outputLight( const ScenePlug *scene, const ScenePlug::ScenePath &path, IECore::Renderer *renderer )
 {
-	IECore::ConstLightPtr constLight = runTimeCast<const IECore::Light>( scene->object( path ) );
+	IECore::ConstLightPtr lightObject = runTimeCast<const IECore::Light>( scene->object( path ) );
 
 	if( !visible( scene, path ) )
 	{
@@ -216,14 +217,12 @@ bool outputLight( const ScenePlug *scene, const ScenePlug::ScenePath &path, IECo
 	std::string lightHandle;
 	ScenePlug::pathToString( path, lightHandle );
 
-	LightPtr light = NULL;
-	if( constLight )
+	if( lightObject )
 	{
-		light = constLight->copy();
+		LightPtr light = NULL;
+		light = lightObject->copy();
 		light->setHandle( lightHandle );
-	}
 
-	{
 		AttributeBlock attributeBlock( renderer );
 
 		renderer->setAttribute( "name", new StringData( lightHandle ) );
@@ -231,17 +230,42 @@ bool outputLight( const ScenePlug *scene, const ScenePlug::ScenePath &path, IECo
 
 		renderer->concatTransform( transform );
 
-		InternedString metadataTarget = "light:" + constLight->getName();
+
+		if( light )
+		{
+			InternedString metadataTarget = "light:" + lightObject->getName();
+			ConstM44fDataPtr orientation = Metadata::value<M44fData>( metadataTarget, "renderOrientation" );
+			if( orientation )
+			{
+				renderer->concatTransform( orientation->readable() );
+			}
+
+			light->render( renderer );
+		}
+	}
+	else
+	{
+		std::string rendererPrefix = "ri";
+		IECore::ConstShaderPtr lightShader = attributes->member<IECore::Shader>( rendererPrefix + ":light" );
+	
+		if( !lightShader ) return false;
+
+		AttributeBlock attributeBlock( renderer );
+
+		renderer->setAttribute( "name", new StringData( lightHandle ) );
+		outputAttributes( attributes.get(), renderer );
+
+		renderer->concatTransform( transform );
+
+		InternedString metadataTarget = rendererPrefix + ":light:" + lightShader->getName();
+
 		ConstM44fDataPtr orientation = Metadata::value<M44fData>( metadataTarget, "renderOrientation" );
 		if( orientation )
 		{
 			renderer->concatTransform( orientation->readable() );
 		}
 
-		if( light )
-		{
-			light->render( renderer );
-		}
+		renderer->light( lightShader->getName(), lightHandle, lightShader->parameters() );
 	}
 
 	renderer->illuminate( lightHandle, true );

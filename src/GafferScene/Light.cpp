@@ -75,21 +75,42 @@ void Light::affects( const Gaffer::Plug *input, AffectedPlugsContainer &outputs 
 
 	if( parametersPlug()->isAncestorOf( input ) )
 	{
-		outputs.push_back( sourcePlug() );
+		//outputs.push_back( sourcePlug() );
+		outputs.push_back( outPlug()->attributesPlug() );
 	}
+
 }
 
 void Light::hashSource( const Gaffer::Context *context, IECore::MurmurHash &h ) const
 {
-	hashLight( context, h );
+	//hashLight( context, h );
 }
 
 IECore::ConstObjectPtr Light::computeSource( const Context *context ) const
 {
-	return computeLight( context );
+	//return computeLight( context );
+	//return parent->objectPlug()->defaultValue();
+	return NULL;
 }
 
 IECore::InternedString Light::standardSetName() const
 {
 	return g_lightsSetName;
 }
+
+void Light::hashAttributes( const SceneNode::ScenePath &path, const Gaffer::Context *context, const ScenePlug *parent, IECore::MurmurHash &h ) const
+{
+	hashLight( context, h );
+}
+
+IECore::ConstCompoundObjectPtr Light::computeAttributes( const SceneNode::ScenePath &path, const Gaffer::Context *context, const ScenePlug *parent ) const
+{
+	IECore::CompoundObjectPtr result = new IECore::CompoundObject;
+
+	// TODO:  use correct renderer prefix
+	result->members()["ri:light"] = computeLight( context );
+
+	return result;
+}
+
+
