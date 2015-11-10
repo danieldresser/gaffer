@@ -204,6 +204,7 @@ void StandardLightVisualiser::addEnvLightVisualiser( GroupPtr &output, IECoreGL:
 	parameters->members()["lightMultiplier"] = new Color3fData( multiplier );
 	parameters->members()["previewOpacity"] = new FloatData( 1 );
 	parameters->members()["mapSampler"] = new StringData( textureName );
+	parameters->members()["defaultColor"] = new Color3fData( Color3f( textureName == "" ? 1.0f : 0.0f ) );
 	sphereGroup->getState()->add(
 		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), IECoreGL::Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
 	);
@@ -217,12 +218,24 @@ void StandardLightVisualiser::addEnvLightVisualiser( GroupPtr &output, IECoreGL:
 void StandardLightVisualiser::addAreaLightVisualiser( IECoreGL::State &state, const std::string &metadataTarget, const IECore::Shader *lightShader, Color3f multiplier )
 {
 	const std::string textureName = parameter<std::string>( metadataTarget, lightShader, "textureNameParameter", "" );
+	const bool flipNormal = parameter<bool>( metadataTarget, lightShader, "flipNormalParameter", 0 );
+	const bool doubleSided = parameter<bool>( metadataTarget, lightShader, "doubleSidedParameter", 0 );
+	const bool sphericalProjection = parameter<bool>( metadataTarget, lightShader, "sphericalProjectionParameter", 0 );
+
+	M44f identity;
+	const std::vector<float> projectionTransform = parameter<std::vector<float> >( metadataTarget, lightShader, "projectionTransformParameter", std::vector<float>( (float*)identity.x, ((float*)identity.x) + 16 ) );
+	//std::cerr << "T:" << projectionTransform << "\n";
 	IECore::CompoundObjectPtr parameters = new CompoundObject;
 	parameters->members()["lightMultiplier"] = new Color3fData( multiplier );
 	parameters->members()["previewOpacity"] = new FloatData( 1 );
 	parameters->members()["mapSampler"] = new StringData( textureName );
+	parameters->members()["defaultColor"] = new Color3fData( Color3f( textureName == "" ? 1.0f : 0.0f ) );
+	parameters->members()["flipNormal"] = new BoolData( flipNormal );
+	parameters->members()["doubleSided"] = new BoolData( doubleSided );
+	parameters->members()["sphericalProjection"] = new BoolData( sphericalProjection );
+	parameters->members()["projectionTransform"] = new M44fData( M44f( (float(*)[4])(&projectionTransform[0]) ) );
 	state.add(
-		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), IECoreGL::Shader::defaultVertexSource(), "", environmentLightDrawFragSource(), parameters )
+		new IECoreGL::ShaderStateComponent( ShaderLoader::defaultShaderLoader(), TextureLoader::defaultTextureLoader(), areaLightDrawVertexSource(), "", areaLightDrawFragSource(), parameters )
 	);
 }
 
@@ -440,13 +453,87 @@ const char *StandardLightVisualiser::environmentLightDrawFragSource()
 		"in vec2 fragmentst;"
 		""
 		"uniform vec3 lightMultiplier;"
+		"uniform vec3 defaultColor;"
 		"uniform float previewOpacity;"
 		""
 		"uniform sampler2D mapSampler;"
 		""
 		"void main()"
 		"{"
-			"vec3 c = texture2D( mapSampler, fragmentst ).xyz;"
+			"vec3 c = defaultColor + texture2D( mapSampler, fragmentst ).xyz;"
+			"gl_FragColor = vec4( ieLinToSRGB( c * lightMultiplier ), previewOpacity );"
+		"}"
+	;
+}
+
+const char *StandardLightVisualiser::areaLightDrawVertexSource()
+{
+    return
+		"#version 150 compatibility\n"
+        ""
+		"uniform bool doubleSided;"
+		"uniform bool flipNormal;"
+		"uniform mat4 projectionTransform;"
+		""
+        "in vec3 vertexP;"
+        "in vec3 vertexN;"
+        "in vec2 vertexst;"
+        ""
+        "out vec3 fragmentProjectPos;"
+        "out vec2 fragmentst;"
+        "out float fragmentOnLitSide;"
+        ""
+        "void main()"
+        "{"
+        "   vec4 pCam = gl_ModelViewMatrix * vec4( vertexP, 1 );"
+        "   fragmentProjectPos = (projectionTransform * vec4( vertexP, 1 )).xyz;"
+        //"   fragmentProjectPos = vertexP;"
+        "   gl_Position = gl_ProjectionMatrix * pCam;"
+        "   vec3 N = normalize( gl_NormalMatrix * vertexN );"
+		"	vec3 I = vec3( 0, 0, -1 );"
+        "   if( gl_ProjectionMatrix[2][3] != 0.0 )"
+        "   {"
+        "       I = normalize( -pCam.xyz );"
+        "   }"
+        ""
+        ""
+        "   fragmentst = vertexst;"
+
+		"	fragmentOnLitSide = ( flipNormal ? -1 : 1 ) * dot( I,  N ) >= 0.0 ? float( doubleSided ) : 1.0;"
+        "}";
+}
+
+
+const char *StandardLightVisualiser::areaLightDrawFragSource()
+{
+	return
+		"#version 150 compatibility\n"
+		""
+		"#include \"IECoreGL/ColorAlgo.h\"\n"
+		""
+		"in vec2 fragmentst;"
+		"in float fragmentOnLitSide;"
+		"in vec3 fragmentProjectPos;"
+		""
+		"uniform vec3 lightMultiplier;"
+		"uniform vec3 defaultColor;"
+		"uniform float previewOpacity;"
+		"uniform bool sphericalProjection;"
+
+		""
+		"uniform sampler2D mapSampler;"
+		""
+		"void main()"
+		"{"
+			"vec2 texCoords = fragmentst;"
+			"if( sphericalProjection )"
+			"{"
+			"	const float toUnit = 0.5 / 3.1415926535897932384626433832795;"
+			"	texCoords = vec2( toUnit * atan(  -fragmentProjectPos.y, -fragmentProjectPos.x),"
+			"					  mod( -2.0 * toUnit * atan( length( fragmentProjectPos.xy ), fragmentProjectPos.z ), 1 )  );"
+			"}"
+			"vec3 c = defaultColor + texture2D( mapSampler, texCoords ).xyz;"
+			"c *= fragmentOnLitSide;"
 			"gl_FragColor = vec4( ieLinToSRGB( c * lightMultiplier ), previewOpacity );"
 		"}"
 	;

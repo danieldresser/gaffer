@@ -212,6 +212,7 @@ bool outputLight( const ScenePlug *scene, const ScenePlug::ScenePath &path, IECo
 	}
 
 	ConstCompoundObjectPtr attributes = scene->fullAttributes( path );
+	ConstObjectPtr object = scene->object( path );
 	const M44f transform = scene->fullTransform( path );
 
 	std::string lightHandle;
@@ -266,6 +267,11 @@ bool outputLight( const ScenePlug *scene, const ScenePlug::ScenePath &path, IECo
 		}
 
 		renderer->light( lightShader->getName(), lightHandle, lightShader->parameters() );
+
+		if( const VisibleRenderable* renderable = runTimeCast< const VisibleRenderable >( object.get() ) )
+		{
+			renderable->render( renderer );
+		}
 	}
 
 	renderer->illuminate( lightHandle, true );

@@ -72,6 +72,8 @@ class StandardLightVisualiser : public AttributeVisualiser
 
 		static const char *faceCameraVertexSource();
 		static const char *environmentLightDrawFragSource();
+		static const char *areaLightDrawVertexSource();
+		static const char *areaLightDrawFragSource();
 
 		static IECoreGL::ConstRenderablePtr ray();
 		static IECoreGL::ConstRenderablePtr pointRays();
