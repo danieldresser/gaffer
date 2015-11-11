@@ -104,13 +104,17 @@ void AppleseedLight::hashLight( const Gaffer::Context *context, IECore::MurmurHa
 	modelPlug()->hash( h );
 }
 
-IECore::LightPtr AppleseedLight::computeLight( const Gaffer::Context *context ) const
+IECore::ObjectVectorPtr AppleseedLight::computeLight( const Gaffer::Context *context ) const
 {
-	IECore::LightPtr result = new IECore::Light( "as:" + modelPlug()->getValue() );
+
+	IECore::CompoundDataMap parms;
 	for( InputValuePlugIterator it( parametersPlug() ); it!=it.end(); it++ )
 	{
-		result->parameters()[(*it)->getName()] = CompoundDataPlug::extractDataFromPlug( it->get() );
+		parms[(*it)->getName()] = CompoundDataPlug::extractDataFromPlug( it->get() );
 	}
+
+	IECore::ObjectVectorPtr result = new IECore::ObjectVector();
+	result->members().push_back( new IECore::Shader( modelPlug()->getValue(), "as:light", parms ) );
 	return result;
 }
 

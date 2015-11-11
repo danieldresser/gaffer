@@ -74,7 +74,7 @@ void RenderManLight::hashLight( const Gaffer::Context *context, IECore::MurmurHa
 	shaderNamePlug()->hash( h );
 }
 
-IECore::ShaderPtr RenderManLight::computeLight( const Gaffer::Context *context ) const
+IECore::ObjectVectorPtr RenderManLight::computeLight( const Gaffer::Context *context ) const
 {
 	// TODO - Is it OK to use CompoundDataPlug::extractDataFromPlug on a Plug?
 	// If it is OK, should there be a static equivalent to CompoundDataPlug::fillCompoundObject,
@@ -84,7 +84,8 @@ IECore::ShaderPtr RenderManLight::computeLight( const Gaffer::Context *context )
 	{
 		parms[(*it)->getName()] = CompoundDataPlug::extractDataFromPlug( it->get() );
 	}
-	IECore::ShaderPtr result = new IECore::Shader( shaderNamePlug()->getValue(), "ri:light", parms );
+	IECore::ObjectVectorPtr result = new IECore::ObjectVector();
+	result->members().push_back( new IECore::Shader( shaderNamePlug()->getValue(), "ri:light", parms ) );
 	return result;
 }
 

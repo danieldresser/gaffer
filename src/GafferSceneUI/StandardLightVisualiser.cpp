@@ -36,6 +36,7 @@
 
 #include "IECore/MeshPrimitive.h"
 #include "IECore/Shader.h"
+#include "IECore/ObjectVector.h"
 
 #include "IECoreGL/CurvesPrimitive.h"
 #include "IECoreGL/SpherePrimitive.h"
@@ -320,7 +321,11 @@ void StandardLightVisualiser::visualise( const IECore::CompoundObject *attribute
 		const std::string &key = it->first.string();
 		if( key.size() >= 6 && key.compare( key.length() - 6, 6, ":light" ) == 0 )
 		{
-			const IECore::Shader *lightShader = runTimeCast<const IECore::Shader>( it->second.get() );
+			const IECore::ObjectVector *shaderVector = runTimeCast<const IECore::ObjectVector>( it->second.get() );
+			if( !shaderVector ) continue;
+		
+			// TODO - handle lights with multiple shaders?	
+			const IECore::Shader *lightShader = runTimeCast<const IECore::Shader>( shaderVector->members()[0] ).get();
 			if( !lightShader ) continue;
 
 			InternedString metadataTarget = key + ":" + lightShader->getName();
