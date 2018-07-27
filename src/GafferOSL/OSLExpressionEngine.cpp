@@ -190,6 +190,17 @@ class RendererServices : public OSL::RendererServices
 						*(const char **)value = s.c_str();
 						return true;
 					}
+					case M44fVectorDataPlugTypeId :
+					{
+						M44f *mValue = (M44f *)value;
+						ConstM44fVectorDataPtr mData = static_cast<const M44fVectorDataPlug *>( plug )->getValue();
+						for( const M44f &m : mData->readable() )
+						{
+							*mValue = m;
+							mValue++;
+						}
+						return true;
+					}
 					default :
 						return false;
 				}
@@ -445,6 +456,7 @@ class OSLExpressionEngine : public Gaffer::Expression::Engine
 				case V3fPlugTypeId :
 				case M44fPlugTypeId :
 				case StringPlugTypeId :
+				case M44fVectorDataPlugTypeId :
 					break;
 				default :
 					return ""; // Unsupported plug type
@@ -478,7 +490,8 @@ class OSLExpressionEngine : public Gaffer::Expression::Engine
 				else
 				{
 					string defaultValue;
-					string type = parameterType( *oldIt, defaultValue );
+					int arrayLength;
+					string type = parameterType( *oldIt, defaultValue, arrayLength );
 					if( (*oldIt)->direction() == Plug::In )
 					{
 						replacement = defaultValue;
@@ -614,8 +627,9 @@ class OSLExpressionEngine : public Gaffer::Expression::Engine
 			return result;
 		}
 
-		static string parameterType( const ValuePlug *plug, string &defaultValue )
+		static string parameterType( const ValuePlug *plug, string &defaultValue, int &arrayLength )
 		{
+			arrayLength = -1;
 			switch( (Gaffer::TypeId)plug->typeId() )
 			{
 				case BoolPlugTypeId :
@@ -639,6 +653,10 @@ class OSLExpressionEngine : public Gaffer::Expression::Engine
 				case StringPlugTypeId :
 					defaultValue = "\"\"";
 					return "string";
+				case M44fVectorDataPlugTypeId :
+					defaultValue = "{ matrix( 42.0 ) }";
+					arrayLength = static_cast<const M44fVectorDataPlug *>( plug )->getValue()->readable().size();
+					return "matrix";
 				default :
 					throw Exception( string( "Unsupported plug type \"" ) + plug->typeName() + "\"" );
 			}
@@ -662,8 +680,16 @@ class OSLExpressionEngine : public Gaffer::Expression::Engine
 			for( int i = 0, e = inPlugPaths.size(); i < e; ++i )
 			{
 				string defaultValue;
-				string type = parameterType( inPlugs[i], defaultValue );
-				result += "\t" + type + " parent." + inPlugPaths[i] + " = " + defaultValue + ",\n";
+				int arrayLength;
+				string type = parameterType( inPlugs[i], defaultValue, arrayLength );
+				if( arrayLength > 0 )
+				{
+					result += "\t" + type + " parent." + inPlugPaths[i] + "[" + to_string( arrayLength ) + "]" + " = " + defaultValue + ",\n";
+				}
+				else
+				{
+					result += "\t" + type + " parent." + inPlugPaths[i] + " = " + defaultValue + ",\n";
+				}
 			}
 
 			result += "\n";
@@ -671,8 +697,16 @@ class OSLExpressionEngine : public Gaffer::Expression::Engine
 			for( int i = 0, e = outPlugPaths.size(); i < e; ++i )
 			{
 				string defaultValue;
-				string type = parameterType( outPlugs[i], defaultValue );
-				result += "\toutput " + type + " parent." + outPlugPaths[i] + " = " + defaultValue + ",\n";
+				int arrayLength;
+				string type = parameterType( outPlugs[i], defaultValue, arrayLength );
+				if( arrayLength > 0 )
+				{
+					throw Exception( "TODO : How would we specify the length of an output array?" );
+				}
+				else
+				{
+					result += "\toutput " + type + " parent." + outPlugPaths[i] + " = " + defaultValue + ",\n";
+				}
 			}
 
 			result += "\n\t// Dummy parameters we can use as outputs when connections\n";
